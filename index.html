@@ -2355,23 +2355,50 @@
     }
 
     function playCallPickupSound() {
-      const ctx = getCallAudioContext();
-      if (!ctx) return;
-      const now = ctx.currentTime;
+  const ctx = getCallAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
 
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(920, now);
-      osc.frequency.exponentialRampToValueAtTime(340, now + 0.065);
+  // 짧은 노이즈 버퍼: '찰칵' 질감의 재료
+  const len = Math.floor(ctx.sampleRate * 0.05);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
 
-      gain.gain.setValueAtTime(0.14, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  // 딸깍 한 번 = 노이즈 터짐 + 낮은 '툭' 울림
+  function click(t, freq, vol, dur, thumpFreq) {
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = freq;
+    bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+    src.start(t);
+    src.stop(t + dur + 0.01);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.075);
+    const osc = ctx.createOscillator();
+    const og = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(thumpFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(thumpFreq * 0.5, t + dur * 2);
+    og.gain.setValueAtTime(vol * 0.6, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dur * 2);
+    osc.connect(og);
+    og.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur * 2 + 0.01);
+  }
+
+  click(now,         2400, 0.5, 0.018, 220);  // 달
+  click(now + 0.085, 1500, 0.7, 0.028, 150);  // 칵
+      }
+    
     }
 
     function startCall(contactId) {
